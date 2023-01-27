@@ -1,1 +1,5 @@
+# Environment ignore
 venv/*
+
+# Noise Ignore
+*__pycache__
