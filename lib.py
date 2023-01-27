@@ -4,13 +4,28 @@ from PySpice.Probe.WaveForm import OperatingPoint
 from PySpice.Unit import *
 import PySpice.Logging.Logging as Logging
 
+
 logger = Logging.setup_logging()
+
 
 __all__ = [
     'circuit1',
     'what_is_unit',
     'parallel_resistor_circuit',
 ]
+
+
+class ParallelResistors(SubCircuitFactory):
+    __name__ = "ParallelResistors"
+    __nodes__ = ('n1', 'n2')
+
+    def __init__(self, *r_units):
+        super().__init__()
+        for i, r_unit in enumerate(r_units):
+            if isinstance(r_unit, type(1@u_Ohm)):
+            # if isinstance(r_unit, type(u_Ohm)):
+                self.R(i, self.__nodes__[0], self.__nodes__[1], r_unit)
+
 
 def what_is_unit():
     option = 1
@@ -28,19 +43,6 @@ def what_is_unit():
         simulator = circuit.simulator(temperature=25, nominal_temperature=25)
         analysis = simulator.operating_point()
         print(type(analysis))
-
-
-class ParallelResistors(SubCircuitFactory):
-    __name__ = "ParallelResistors"
-    __nodes__ = ('n1', 'n2')
-
-    def __init__(self, *r_units):
-        super().__init__()
-        for i, r_unit in enumerate(r_units):
-            if isinstance(r_unit, type(1@u_Ohm)):
-            # if isinstance(r_unit, type(u_Ohm)):
-                self.R(i, __nodes__[0], __nodes__[1], r_unit)
-
 
 def print_nodes(analysis:OperatingPoint):
     if isinstance(analysis, OperatingPoint):
