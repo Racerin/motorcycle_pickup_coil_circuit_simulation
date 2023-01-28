@@ -16,15 +16,19 @@ __all__ = [
 
 
 class ParallelResistors(SubCircuitFactory):
-    __name__ = "ParallelResistors"
-    __nodes__ = ('n1', 'n2')
+    NAME = "ParallelResistors"
+    # __name__ = "ParallelResistors"
+    # __nodes__ = ('n1', 'n2',)
+    NODES = ('n1', 'n2',)
 
-    def __init__(self, *r_units):
-        super().__init__()
+    def __init__(self, *r_units, **kwargs):
+        super().__init__(**kwargs)
         for i, r_unit in enumerate(r_units):
             if isinstance(r_unit, type(1@u_Ohm)):
-            # if isinstance(r_unit, type(u_Ohm)):
-                self.R(i, self.__nodes__[0], self.__nodes__[1], r_unit)
+                self.R(i, self.NODES[0], self.NODES[1], r_unit)
+                # self.R(1, 'n1', 'n2', 1@u_kOhm)
+            else:
+                raise TypeError("r_unit {} is not a circuit value.".format(r_unit))
 
 
 def what_is_unit():
@@ -81,4 +85,11 @@ def parallel_resistor_circuit():
     parallel_resistors = ParallelResistors(2@u_kOhm, 4@u_kOhm, 500@u_Ohm)
     circuit.subcircuit(parallel_resistors)
     circuit.V(1, 1, circuit.gnd, 5@u_V)
-    circuit.X('1', 'parallel_resistors', 1, circuit.gnd)
+    circuit.X('2', 'parallel_resistors', 1, circuit.gnd)
+
+    simulator = circuit.simulator(temperature=25, nominal_temperature=25)
+    analysis = simulator.operating_point()
+
+    print(circuit)
+
+    print_nodes(analysis)
