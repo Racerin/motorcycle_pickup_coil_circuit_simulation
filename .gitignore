@@ -3,3 +3,6 @@ venv/*
 
 # Noise Ignore
 *__pycache__
+
+# VS Code
+.vscode
