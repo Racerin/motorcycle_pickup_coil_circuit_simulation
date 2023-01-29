@@ -15,7 +15,10 @@ from PySpice.Physics.SemiConductor import ShockleyDiode
 
 
 logger = Logging.setup_logging()
-libraries_path = find_libraries()
+
+ASSET_PATH = os.path.join(os.getcwd(), 'assets')
+
+libraries_path = os.path.join(ASSET_PATH, 'examples')
 spice_library = SpiceLibrary(libraries_path)
 
 
@@ -24,7 +27,9 @@ __all__ = [
     'what_is_unit',
     'parallel_resistor_circuit',
     'raw_spice_circuit',
+    'read_num_from_text_file',
     'rectifier_circuit',
+    'engine_pickup_sensor_circuit',
 ]
 
 
@@ -43,16 +48,15 @@ class ParallelResistors(SubCircuitFactory):
                 raise TypeError("r_unit {} is not a circuit value.".format(r_unit))
 
 class Rectifier(SubCircuitFactory):
-
     NAME = 'Rectifier'
     NODES = (
         'input_1', 'input_2',
         'output_1', 'output_2',
     )
 
-    def __init__(self, diode_model):
+    def __init__(self, diode_model, name=NAME):
+        self.NAME = name
         super().__init__()
-
         self.X('D1', diode_model, 'input_1', 'output_1')
         self.X('D2', diode_model, 'output_2', 'input_2')
         self.X('D3', diode_model, 'output_2', 'input_1')
@@ -126,8 +130,7 @@ def raw_spice_circuit():
     Use raw spice text to create circuit.
     Reads 'Netlist' text file under 'assets'.
       """
-    text = "".join(open(os.path.join(os.getcwd(),"assets/raw_spice.txt")).readlines())
-    # print(text)
+    text = "".join(open(os.path.join(ASSET_PATH, "raw_spice.txt")).readlines())
 
     circuit = Circuit("Raw Spice")
     circuit.raw_spice = text
@@ -139,12 +142,42 @@ def raw_spice_circuit():
 
     print(circuit)
 
+def read_num_from_text_file(filename:str="No load.txt") -> list[float]:
+    """ Reads numbers per line from text file """
+    numbers = []
+    path = os.path.join(ASSET_PATH, filename)
+    with open(path) as file:
+        for line in file.readlines():
+            try:
+                num = float(line.strip())
+                numbers.append(num)
+            except ValueError:
+                pass
+    return numbers
 
 def rectifier_circuit():
     circuit = Circuit("Rectifier")
 
     diode = spice_library['1N4148']
-    print("These are the components in the spice library.")
-    for k,v in spice_library.items():
-        print("{}|{}".format(k,v))
+    rectifier = Rectifier(diode_model=diode)
+    circuit.V('input', 'input', circuit.gnd, 0.7@u_V)
+    circuit.subcircuit(rectifier)
+    # circuit.X('1', rectifier.NAME, 'input', circuit.gnd, , )
+
+def engine_pickup_sensor_circuit():
+    circuit = Circuit("Rectify External Voltage")
+
+    diode = spice_library['1N4148']
+    circuit.include(diode)
+
+    circuit.V('input', 'input', circuit.gnd, 'dc 0 external')
+    circuit.R(1, 'in', 'out', 700@u_Ohm)
+    circuit.X('D1', '1N4148', 'out', circuit.gnd)
+
+    simulator = circuit.simulator()
+    numbers = read_num_from_text_file()
+    analysis = simulator.dc(Vinput=numbers)
+    # TO BE CONTINUED
+
+    # print(diode, 'diode')
     # circuit.include(diode)
