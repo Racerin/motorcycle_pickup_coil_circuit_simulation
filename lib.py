@@ -175,9 +175,25 @@ def engine_pickup_sensor_circuit():
     circuit.X('D1', '1N4148', 'out', circuit.gnd)
 
     simulator = circuit.simulator()
-    numbers = read_num_from_text_file()
-    analysis = simulator.dc(Vinput=numbers)
-    # TO BE CONTINUED
+    voltages = read_num_from_text_file()
+    voltage_diffs = [abs(voltages[i+1] - voltages[i]) for i in range(len(voltages)-1) if abs(voltages[i+1] - voltages[i]) > 0]
+
+    # STOPPED HERE
+    # analysis = simulator.dc(Vinput=voltages)
+    # analysis = simulator.dc(Vinput=slice(min(voltages), max(voltages), min(voltage_diffs)))
+    analysis = simulator.dc(Vinput=slice(0.8))
+
+    n_voltages = len(voltages)
+    t = np.linspace(0, 10*0.05, num=n_voltages)
+    
+    figure, axis = plt.subplots(1,1)
+    axis.plot(t, voltages, t, analysis.Vinput)
+
+    axis.set(xlabel='Time (s)', ylabel='Voltage (V)', title="Graph showing response of voltage.")
+    axis.grid()
+
+    # fig.savefig("meh.png")
+    plt.show()
 
     # print(diode, 'diode')
     # circuit.include(diode)
