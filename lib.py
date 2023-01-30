@@ -1,5 +1,6 @@
 import os
 import math
+import numbers
 
 import numpy as np
 
@@ -7,6 +8,8 @@ import matplotlib.pyplot as plt
 
 import PySpice.Logging.Logging as Logging
 from PySpice.Unit import *
+from PySpice.Probe.Plot import plot
+from PySpice.Spice.NgSpice.Shared import NgSpiceShared
 from PySpice.Spice.Netlist import Circuit, SubCircuitFactory
 from PySpice.Probe.WaveForm import OperatingPoint
 from PySpice.Doc.ExampleTools import find_libraries
@@ -30,8 +33,39 @@ __all__ = [
     'read_num_from_text_file',
     'rectifier_circuit',
     'engine_pickup_sensor_circuit',
+    'engine_pickup_sensor_circuit_2',
 ]
 
+
+
+
+def read_num_from_text_file(filename:str="No load.txt") -> list[float]:
+    """ Reads numbers per line from text file """
+    numbers = []
+    path = os.path.join(ASSET_PATH, filename)
+    with open(path) as file:
+        for line in file.readlines():
+            try:
+                num = float(line.strip())
+                numbers.append(num)
+            except ValueError:
+                pass
+    return numbers
+    
+
+class MyNgSpiceShared(NgSpiceShared):
+
+    __voltages = read_num_from_text_file()
+    
+    def get_vsrc_data(self, voltage, time, node, ngspice_id):
+        self._logger.debug('ngspice_id-{} get_vsrc_data @{} node {}'.format(ngspice_id, time, node))
+        return 0
+        # return super().get_vsrc_data(voltage, time, node, ngspice_id)
+
+    def get_isrc_data(self, current, time, node, ngspice_id):
+        self._logger.debug('ngspice_id-{} get_isrc_data @{} node {}'.format(ngspice_id, time, node))
+        return 0
+        # return super().get_isrc_data(current, time, node, ngspice_id)
 
 class ParallelResistors(SubCircuitFactory):
     NAME = "ParallelResistors"
@@ -62,6 +96,29 @@ class Rectifier(SubCircuitFactory):
         self.X('D3', diode_model, 'output_2', 'input_1')
         self.X('D4', diode_model, 'input_2', 'output_1')
 
+
+def closest_input_for_output(dict1:dict, key)->'dict1[key]':
+    """ Returns the value corresponding to the best matching key. """
+    assert isinstance(dict1, dict), "dict1 is not of type 'dictionary'."
+    # Checks
+    if dict1 == dict():
+        return None
+    # Setting default values to compare with
+    best_key = list(dict1.keys())[0]
+    best_value, best_score = dict1[best_key], None
+    if isinstance(key, numbers.Number):
+        assert all((isinstance(k,numbers.Number) for k in dict1.keys()))
+        if best_score is None:
+            best_score = abs(best_key - key)
+        for k,v in dict1.items():
+            # The closer the key and value's key, the better the score
+            if abs(k - key) < best_score:
+                best_value = v
+            # Best possible answer
+            if best_score == 0: break
+    else:
+        raise TypeError("type '{}' is not supported for the function 'closest_input_for_output'.".format(type(key)))
+    return best_value
 
 def what_is_unit():
     option = 1
@@ -142,19 +199,6 @@ def raw_spice_circuit():
 
     print(circuit)
 
-def read_num_from_text_file(filename:str="No load.txt") -> list[float]:
-    """ Reads numbers per line from text file """
-    numbers = []
-    path = os.path.join(ASSET_PATH, filename)
-    with open(path) as file:
-        for line in file.readlines():
-            try:
-                num = float(line.strip())
-                numbers.append(num)
-            except ValueError:
-                pass
-    return numbers
-
 def rectifier_circuit():
     circuit = Circuit("Rectifier")
 
@@ -170,27 +214,66 @@ def engine_pickup_sensor_circuit():
     diode = spice_library['1N4148']
     circuit.include(diode)
 
-    circuit.V('input', 'input', circuit.gnd, 'dc 0 external')
+    # circuit.V('input', 'input', circuit.gnd, 'dc 0 external')
+    circuit.V('input', 'input', circuit.gnd, 14.4@u_V)
     circuit.R(1, 'in', 'out', 700@u_Ohm)
     circuit.X('D1', '1N4148', 'out', circuit.gnd)
+    print(circuit)
 
     simulator = circuit.simulator()
     voltages = read_num_from_text_file()
-    voltage_diffs = [abs(voltages[i+1] - voltages[i]) for i in range(len(voltages)-1) if abs(voltages[i+1] - voltages[i]) > 0]
 
     # STOPPED HERE
-    # analysis = simulator.dc(Vinput=voltages)
-    # analysis = simulator.dc(Vinput=slice(min(voltages), max(voltages), min(voltage_diffs)))
-    analysis = simulator.dc(Vinput=slice(0.8))
+    slice1 = slice(0, max(voltages), 1e-3)
+    analysis = simulator.dc(Vinput=slice1)
 
     n_voltages = len(voltages)
-    t = np.linspace(0, 10*0.05, num=n_voltages)
+    times = np.linspace(0, 10*0.05, num=n_voltages)
+    if False:
+        t_input_voltage_pair = dict()
+        for i in range(n_voltages):
+            t_input_voltage_pair.update({times[i]:voltages[i]})
+        # output_voltages = [closest_input_for_output(dict1, analysis.out[t]) for t in times]
     
     figure, axis = plt.subplots(1,1)
-    axis.plot(t, voltages, t, analysis.Vinput)
+    # axis.plot(t, voltages, t, analysis.Vinput)
+    # axis.plot(times, voltages, times, output_voltages)
+    
+    analysis = simulator.transient(step_time=1@u_us, end_time=2@u_s)
+    axis.plot(times, voltages, times, analysis.out)
+
 
     axis.set(xlabel='Time (s)', ylabel='Voltage (V)', title="Graph showing response of voltage.")
     axis.grid()
+
+    # fig.savefig("meh.png")
+    plt.show()
+
+    # print(diode, 'diode')
+    # circuit.include(diode)
+
+def engine_pickup_sensor_circuit_2():
+    circuit = Circuit("Rectify External Voltage")
+
+    diode = spice_library['1N4148']
+    circuit.include(diode)
+
+    circuit.V('input', 'input', circuit.gnd, 'dc 0 external')
+    circuit.R(1, 'input', 'output', 700@u_Ohm)
+    # circuit.X('D1', '1N4148', 'output', circuit.gnd)
+    circuit.R(2, 'output', circuit.gnd, 10@u_Ohm)
+    print(circuit)
+
+    ngspice_shared = MyNgSpiceShared()
+    simulator = circuit.simulator(simulator='ngspice-shared', ngspice_shared=ngspice_shared)
+
+    analysis = simulator.transient(step_time=1@u_us, end_time=10*50@u_us)
+    # times = np.linspace(0, 10*0.05, num=n_voltages)
+
+    figure, axis = plt.subplots()
+    axis.set(xlabel='Time (s)', ylabel='Voltage (V)', title="Graph showing response of voltage.", grid=True)
+    # axis.grid()
+    axis.plot(analysis.input)
 
     # fig.savefig("meh.png")
     plt.show()
