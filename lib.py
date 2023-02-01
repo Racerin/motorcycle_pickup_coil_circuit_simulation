@@ -1,6 +1,7 @@
 import os
 import math
 import numbers
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -55,17 +56,42 @@ def read_num_from_text_file(filename:str="No load.txt") -> list[float]:
 
 class MyNgSpiceShared(NgSpiceShared):
 
-    __voltages = read_num_from_text_file()
+
+    def __init__(
+            self, voltages:Sequence=None, step_time=None, end_time:float=1.0,
+            default_voltage=0, **kwargs):
+        super().__init__(**kwargs)
+
+        # Ternary Operators
+        self.voltages = voltages if isinstance(voltages, Sequence) \
+            else read_num_from_text_file()
+        self.end_time = end_time
+        self.step_time = step_time if isinstance(step_time, numbers.Number) \
+            else self.end_time / len(self.voltages)
+        self.default_voltage = default_voltage
+
+        # Preping for callback function
+        self.callback_voltages = self.voltages.copy()
+        self.callback_voltages.reverse()
+
     
     def get_vsrc_data(self, voltage, time, node, ngspice_id):
         self._logger.debug('ngspice_id-{} get_vsrc_data @{} node {}'.format(ngspice_id, time, node))
+        # voltage[0] = self.__voltages[0]
+        # voltage[0] = 10@u_V * math.sin(50@u_Hz.pulsation * time)
+        try:
+            volt = self.callback_voltages.pop()
+            voltage[0] = volt
+        except IndexError:
+            # If I used up the voltage inputs, use '0' by default.
+            voltage[0] = self.default_voltage
         return 0
-        # return super().get_vsrc_data(voltage, time, node, ngspice_id)
 
     def get_isrc_data(self, current, time, node, ngspice_id):
+        print(current, time, node, ngspice_id)
         self._logger.debug('ngspice_id-{} get_isrc_data @{} node {}'.format(ngspice_id, time, node))
+        current[0] = 1
         return 0
-        # return super().get_isrc_data(current, time, node, ngspice_id)
 
 class ParallelResistors(SubCircuitFactory):
     NAME = "ParallelResistors"
@@ -253,10 +279,21 @@ def engine_pickup_sensor_circuit():
     # circuit.include(diode)
 
 def engine_pickup_sensor_circuit_2():
+    """ 
+        Use Transient method to simulate circuit.
+
+        References:
+        - most important: 
+            https://pyspice.fabrice-salvaire.fr/releases/v1.4/examples/ngspice-shared/external-source.html#simulation-using-external-sources
+        - others: 
+            https://pyspice.fabrice-salvaire.fr/releases/v1.5/examples/diode/diode-characteristic-curve.html#simulation
+            https://pyspice.fabrice-salvaire.fr/releases/v1.5/api/PySpice/Spice/Simulation.html#PySpice.Spice.Simulation.CircuitSimulation.transient
+    """
     circuit = Circuit("Rectify External Voltage")
 
     diode = spice_library['1N4148']
-    circuit.include(diode)
+    # The following line is the issue
+    # circuit.include(diode)
 
     circuit.V('input', 'input', circuit.gnd, 'dc 0 external')
     circuit.R(1, 'input', 'output', 700@u_Ohm)
@@ -264,19 +301,22 @@ def engine_pickup_sensor_circuit_2():
     circuit.R(2, 'output', circuit.gnd, 10@u_Ohm)
     print(circuit)
 
-    ngspice_shared = MyNgSpiceShared()
-    simulator = circuit.simulator(simulator='ngspice-shared', ngspice_shared=ngspice_shared)
+    ngspice_shared = MyNgSpiceShared(step_time=1e-6, end_time=0.5)
+    # ngspice_shared = MyNgSpiceShared(end_time=1)
+    simulator = circuit.simulator(temperature=25, nominal_temperature=25,
+        simulator='ngspice-shared', ngspice_shared=ngspice_shared)
 
-    analysis = simulator.transient(step_time=1@u_us, end_time=10*50@u_us)
-    # times = np.linspace(0, 10*0.05, num=n_voltages)
+    analysis = simulator.transient(
+        step_time=ngspice_shared.step_time, end_time=ngspice_shared.end_time
+        )
+    # analysis = simulator.transient(step_time=1@u_us, end_time=10*50@u_us)
 
     figure, axis = plt.subplots()
-    axis.set(xlabel='Time (s)', ylabel='Voltage (V)', title="Graph showing response of voltage.", grid=True)
-    # axis.grid()
+    axis.set(xlabel='Time (s)', ylabel='Voltage (V)', title="Graph showing response of voltage.")
+    axis.grid()
     axis.plot(analysis.input)
+    axis.plot(analysis.output)
+    axis.legend(('input', 'output'), loc=(0.05, 0.1))
 
     # fig.savefig("meh.png")
     plt.show()
-
-    # print(diode, 'diode')
-    # circuit.include(diode)
