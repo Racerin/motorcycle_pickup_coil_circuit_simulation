@@ -24,6 +24,7 @@ ASSET_PATH = os.path.join(os.getcwd(), 'assets')
 
 libraries_path = os.path.join(ASSET_PATH, 'examples')
 spice_library = SpiceLibrary(libraries_path)
+# spice_library = SpiceLibrary('/lib/')
 
 
 __all__ = [
@@ -294,11 +295,15 @@ def engine_pickup_sensor_circuit_2():
     diode = spice_library['1N4148']
     # The following line is the issue
     # circuit.include(diode)
+    pathh = "assets\examples\libraries\diode\general-purpose\BAV21.lib"
+    # circuit.include(pathh)
 
     circuit.V('input', 'input', circuit.gnd, 'dc 0 external')
     circuit.R(1, 'input', 'output', 700@u_Ohm)
+    circuit.model('1N4148PH', 'D', IS=4.352@u_uA, RS=0.6458@u_Ohm, BV=110@u_V, IBV=0.0001@u_V, N=1.906)
+    circuit.Diode(1, 'output', circuit.gnd, model="1N4148PH")
     # circuit.X('D1', '1N4148', 'output', circuit.gnd)
-    circuit.R(2, 'output', circuit.gnd, 10@u_Ohm)
+    # circuit.R(2, 'output', circuit.gnd, 700@u_Ohm)
     print(circuit)
 
     ngspice_shared = MyNgSpiceShared(step_time=1e-6, end_time=0.5)
@@ -312,7 +317,7 @@ def engine_pickup_sensor_circuit_2():
     # analysis = simulator.transient(step_time=1@u_us, end_time=10*50@u_us)
 
     figure, axis = plt.subplots()
-    axis.set(xlabel='Time (s)', ylabel='Voltage (V)', title="Graph showing response of voltage.")
+    axis.set(xlabel='Time (mµ)', ylabel='Voltage (V)', title="Graph showing response of voltage.")
     axis.grid()
     axis.plot(analysis.input)
     axis.plot(analysis.output)
